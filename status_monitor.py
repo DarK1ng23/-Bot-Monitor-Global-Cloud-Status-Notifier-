@@ -1,64 +1,86 @@
-import os
-import time
 import requests
+import time
+import asyncio
 from telegram import Bot
-from dotenv import load_dotenv
 from flask import Flask
-from threading import Thread
+import threading
 
-# Cargar variables del .env
-load_dotenv()
+# ==========================================
+# 🔧 CONFIGURACIÓN DEL BOT
+# ==========================================
+TOKEN = "TU_TOKEN_TELEGRAM"  # reemplázalo por tu token real
+CHAT_ID = "TU_CHAT_ID"       # reemplázalo por tu chat ID real
+INTERVALO_HORAS = 12         # cada cuánto revisar (12h)
+URLS_MONITOREO = {
+    "AWS": "https://status.aws.amazon.com/",
+    "Microsoft": "https://status.azure.com/",
+    "Google Cloud": "https://status.cloud.google.com/",
+    "Cloudflare": "https://www.cloudflarestatus.com/"
+}
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
-
-bot = Bot(token=TELEGRAM_TOKEN)
-
-def verificar_servicios():
-    servicios = {
-        "AWS": "https://status.aws.amazon.com",
-        "Microsoft": "https://status.azure.com",
-        "Google Cloud": "https://status.cloud.google.com",
-        "Cloudflare": "https://www.cloudflarestatus.com"
-    }
-
-    problemas = []
-
-    for nombre, url in servicios.items():
-        try:
-            response = requests.get(url, timeout=10)
-            if response.status_code != 200:
-                problemas.append(f"⚠️ {nombre} devuelve código {response.status_code}.")
-        except Exception as e:
-            problemas.append(f"❌ Error en {nombre}: {e}")
-
-    if problemas:
-        mensaje = "🚨 Problemas detectados:\n" + "\n".join(problemas)
-    else:
-        mensaje = "✅ Todos los servicios están funcionando correctamente."
-
-    bot.send_message(chat_id=CHAT_ID, text=mensaje)
-
-
-def iniciar_bot():
-    while True:
-        verificar_servicios()
-        time.sleep(43200)  # 12 horas (43200 segundos)
-
-
-# --- SERVIDOR FLASK PARA RENDER ---
+bot = Bot(token=TOKEN)
 app = Flask(__name__)
 
-@app.route('/')
+# ==========================================
+# 🧠 FUNCIÓN ASÍNCRONA PARA ENVIAR MENSAJES
+# ==========================================
+async def send_telegram_message(mensaje):
+    try:
+        await bot.send_message(chat_id=CHAT_ID, text=mensaje)
+        print(f"Mensaje enviado a Telegram: {mensaje}")
+    except Exception as e:
+        print(f"Error al enviar mensaje: {e}")
+
+# ==========================================
+# 🚀 FUNCIÓN PRINCIPAL DE MONITOREO
+# ==========================================
+def monitorear_servicios():
+    while True:
+        print("Iniciando monitoreo de servicios...")
+        problemas = []
+
+        for nombre, url in URLS_MONITOREO.items():
+            try:
+                respuesta = requests.get(url, timeout=10)
+                if respuesta.status_code != 200:
+                    problemas.append(f"{nombre}: Código {respuesta.status_code}")
+            except Exception as e:
+                problemas.append(f"{nombre}: Error {str(e)}")
+
+        if problemas:
+            mensaje = "⚠️ Problemas detectados en los servicios:\n" + "\n".join(problemas)
+            mensaje += "\n\n🔗 Verifica más en: https://status.aws.amazon.com o servicios similares."
+        else:
+            mensaje = "✅ Todos los servicios están funcionando correctamente."
+
+        asyncio.run(send_telegram_message(mensaje))
+
+        # Espera 12 horas antes del siguiente chequeo
+        time.sleep(INTERVALO_HORAS * 3600)
+
+# ==========================================
+# ♻️ AUTO-PING CADA 10 MINUTOS (Mantener vivo Render)
+# ==========================================
+def keep_alive():
+    while True:
+        try:
+            requests.get("https://monitor-bot-335u.onrender.com")
+            print("Ping enviado para mantener activo el bot en Render.")
+        except Exception as e:
+            print(f"Error en ping: {e}")
+        time.sleep(600)  # cada 10 min
+
+# ==========================================
+# 🌐 SERVIDOR FLASK (Render necesita un puerto activo)
+# ==========================================
+@app.route("/")
 def home():
-    return "✅ Bot de monitoreo activo y escuchando."
+    return "✅ Monitor de servicios activo y en ejecución."
 
-def iniciar_flask():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
-
-
-# --- EJECUCIÓN ---
+# ==========================================
+# 🏁 INICIO DE THREADS
+# ==========================================
 if __name__ == "__main__":
-    Thread(target=iniciar_flask).start()
-    iniciar_bot()
+    threading.Thread(target=monitorear_servicios, daemon=True).start()
+    threading.Thread(target=keep_alive, daemon=True).start()
+    app.run(host="0.0.0.0", port=10000)
