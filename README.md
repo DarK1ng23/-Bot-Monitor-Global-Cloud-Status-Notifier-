@@ -1,39 +1,33 @@
 🛰️ Monitor Global Cloud Status Notifier
 
-Monitor Global Cloud Status Notifier es una herramienta automatizada desarrollada en Python que supervisa el estado de los principales servicios en la nube (como AWS, Azure, Microsoft 365, Google Cloud y Google Workspace) y notifica en tiempo real cualquier cambio o interrupción a través de Telegram.
+Monitor Global Cloud Status Notifier is an automated tool developed in Python that monitors the status of major cloud services (such as AWS, Azure, Microsoft 365, Google Cloud, and Google Workspace) and notifies any changes or interruptions in real time via Telegram.
 
-El sistema consulta periódicamente las páginas oficiales de estado, detecta incidentes, degradaciones o caídas, y envía alertas personalizadas con hora local (Colombia) al chat configurado.
-Además, se encuentra desplegado en Render, lo que permite mantener el monitor activo 24/7 sin necesidad de servidores locales.
+The system periodically checks the official status pages, detects incidents, degradations, or outages, and sends customized alerts with local time (Colombia) to the configured chat. In addition, it is deployed on Render, which allows the monitor to remain active 24/7 without the need for local servers.
 
-🚀 Características principales
+🚀 Main features
 
-✅ Monitoreo automático de los servicios cloud más utilizados.
+✅ Automatic monitoring of the most widely used cloud services.
 
-🔔 Notificaciones instantáneas vía Telegram Bot.
+🔔 Instant notifications via Telegram Bot.
 
-🌎 Conversión automática de hora a zona horaria de Colombia (America/Bogota).
+🌎 Automatic conversion of time to Colombia time zone (America/Bogota).
 
-💾 Registro histórico de estados detectados.
+💾 Historical log of detected statuses.
 
-☁️ Despliegue en Render con soporte Flask para mantener el servicio en línea.
+☁️ Deployment on Render with Flask support to keep the service online.
 
-🛠️ Tecnologías utilizadas
+🛠️ Technologies used
 
 Python 3.13
 
-Flask (para el servicio web)
+Flask (for web service)
 
-Requests y HTTPAdapter (para las consultas seguras)
+Requests and HTTPAdapter (for secure queries)
 
-dotenv (manejo de variables de entorno)
+dotenv (environment variable management)
 
-pytz (ajuste de zona horaria)
+pytz (time zone adjustment)
 
-Render (plataforma de despliegue)
+Render (deployment platform)
 
-📩 Notificación de ejemplo
-🚨 Cambio detectado en AWS
-Anterior: ✅ Operativo
-Actual: ⚠️ Problemas detectados
-🕒 2025-10-29 18:30:42 (Hora Colombia)
-🔗 Ver más: https://status.aws.amazon.com/
+📩 Example notification 🚨 Change detected in AWS Previous: ✅ Operational Current: ⚠️ Problems detected 🕒 2025-10-29 18:30:42 (Colombia time) 🔗 See more: https://status.aws.amazon.com/
