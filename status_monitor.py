@@ -12,7 +12,7 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-bot = telegram.Bot(token=TELEGRAM_TOKEN)
+bot = Bot(token=TELEGRAM_TOKEN)
 
 def verificar_servicios():
     servicios = {
