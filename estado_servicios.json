@@ -1,0 +1,7 @@
+{
+    "AWS": "\u2705 Operativo",
+    "Azure": "\u26a0\ufe0f Problemas detectados",
+    "Microsoft 365": "\u274c Error: HTTPSConnectionPool(host='status.office.com', port=443): Max retries exceeded with url: /api/reporting/ServiceComms/CurrentStatus (Caused by SSLError(SSLError(1, '[SSL: SSLV3_ALERT_HANDSHAKE_FAILURE] sslv3 alert handshake failure (_ssl.c:1077)')))",
+    "Google Cloud": "\u26a0\ufe0f Problemas detectados",
+    "Google Workspace": "\u26a0\ufe0f Problemas detectados"
+}
