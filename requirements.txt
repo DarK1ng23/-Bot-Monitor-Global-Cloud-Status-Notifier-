@@ -1,7 +1,8 @@
-python-dotenv
 flask
 requests
 python-telegram-bot==21.1.1
+python-dotenv
+
 
 
 
