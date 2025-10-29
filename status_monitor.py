@@ -4,6 +4,13 @@ import asyncio
 from telegram import Bot
 from flask import Flask
 import threading
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # Carga las variables del archivo .env
+
+TOKEN = os.getenv("TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 
 # ==========================================
 # 🔧 CONFIGURACIÓN DEL BOT
