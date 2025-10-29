@@ -3,6 +3,7 @@ import requests
 import json
 import time
 from datetime import datetime
+import pytz
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from dotenv import load_dotenv
@@ -22,6 +23,7 @@ load_dotenv()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 INTERVALO = 1  # 15 minutos
+ZONA_COLOMBIA = pytz.timezone("America/Bogota")
 
 SERVICIOS = {
     "AWS": "https://status.aws.amazon.com/data.json",
@@ -48,19 +50,23 @@ adapter = HTTPAdapter(max_retries=retries)
 session.mount("https://", adapter)
 session.mount("http://", adapter)
 
+# === FUNCIONES AUXILIARES ===
+def hora_actual_col():
+    """Devuelve la hora actual en hora colombiana (GMT-5)."""
+    return datetime.now(ZONA_COLOMBIA).strftime('%Y-%m-%d %H:%M:%S')
 
-# === FUNCIONES ===
+# === FUNCIONES PRINCIPALES ===
 def enviar_notificacion(mensaje):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     params = {"chat_id": CHAT_ID, "text": mensaje, "parse_mode": None}
     try:
         r = session.get(url, params=params, timeout=10)
         if r.status_code == 200:
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Notificación enviada.")
+            print(f"[{hora_actual_col()}] ✅ Notificación enviada.")
         else:
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Error al enviar notificación: {r.text}")
+            print(f"[{hora_actual_col()}] ⚠️ Error al enviar notificación: {r.text}")
     except Exception as e:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Error al conectar con Telegram: {e}")
+        print(f"[{hora_actual_col()}] ❌ Error al conectar con Telegram: {e}")
 
 
 def cargar_estado_anterior():
@@ -101,7 +107,7 @@ def verificar_servicios():
                 f"🚨 Cambio detectado en {nombre}\n"
                 f"Anterior: {estado_anterior.get(nombre, 'Desconocido')}\n"
                 f"Actual: {estado}\n"
-                f"🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                f"🕒 {hora_actual_col()} (Hora Colombia)"
             )
             if "⚠️" in estado or "❌" in estado:
                 mensaje += f"\n🔗 Ver más: {PAGINAS_ESTADO[nombre]}"
@@ -118,16 +124,15 @@ def enviar_reporte_general(estado_actual):
             reporte += f"• {servicio}: {estado}\n   🔗 {PAGINAS_ESTADO[servicio]}\n"
         else:
             reporte += f"• {servicio}: {estado}\n"
-    reporte += f"\n🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    reporte += f"\n🕒 {hora_actual_col()} (Hora Colombia)"
     enviar_notificacion(reporte)
 
 
 # === PROGRAMA PRINCIPAL ===
 if __name__ == "__main__":
     print("🚀 MONITOR DE SERVICIOS INICIADO")
-    enviar_notificacion("✅ Monitor de servicios iniciado correctamente.")
+    enviar_notificacion("✅ Monitor de servicios iniciado correctamente (Hora Colombia).")
 
-    # Iniciar Flask para Render
     port = int(os.environ.get("PORT", 10000))
     from threading import Thread
 
@@ -135,13 +140,10 @@ if __name__ == "__main__":
         while True:
             resultado = verificar_servicios()
             enviar_reporte_general(resultado)
-            hora = datetime.now().strftime('%H:%M:%S')
-            print(f"\n[{hora}] ESTADO ACTUAL:")
+            print(f"\n[{hora_actual_col()}] ESTADO ACTUAL:")
             for servicio, estado in resultado.items():
                 print(f"   - {servicio}: {estado}")
             time.sleep(INTERVALO)
 
-    # Hilo separado para el monitor
     Thread(target=ejecutar_monitor, daemon=True).start()
-
-    app.run(host="0.0.0.0", port=port)  
+    app.run(host="0.0.0.0", port=port)
