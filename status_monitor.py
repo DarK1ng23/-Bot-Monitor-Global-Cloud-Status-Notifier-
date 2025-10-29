@@ -1,91 +1,129 @@
-import requests
-import time
-import asyncio
 import os
+import requests
+import json
+import time
+from datetime import datetime
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from dotenv import load_dotenv
-from telegram import Bot
-from flask import Flask
-import threading
 
-# ==========================================
-# ⚙️ CARGA DE VARIABLES DE ENTORNO
-# ==========================================
+# Cargar variables desde .env
 load_dotenv()
-TOKEN = os.getenv("TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
-INTERVALO_HORAS = 12  # cada cuánto revisar (12h)
 
-# ==========================================
-# 🌐 URLS A MONITOREAR
-# ==========================================
-URLS_MONITOREO = {
-    "AWS": "https://status.aws.amazon.com/",
-    "Microsoft Azure": "https://status.azure.com/",
-    "Google Cloud": "https://status.cloud.google.com/",
-    "Cloudflare": "https://www.cloudflarestatus.com/"
+# === CONFIGURACIÓN ===
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+INTERVALO = 900  # 15 minutos
+
+SERVICIOS = {
+    "AWS": "https://status.aws.amazon.com/data.json",
+    "Azure": "https://status.azure.com/en-us/status",
+    "Microsoft 365": "https://status.office.com/api/reporting/ServiceComms/CurrentStatus",
+    "Google Cloud": "https://status.cloud.google.com/incidents.json",
+    "Google Workspace": "https://www.google.com/appsstatus/dashboard/incidents.json"
 }
 
-bot = Bot(token=TOKEN)
-app = Flask(__name__)
+PAGINAS_ESTADO = {
+    "AWS": "https://status.aws.amazon.com/",
+    "Azure": "https://status.azure.com/en-us/status",
+    "Microsoft 365": "https://status.office.com/",
+    "Google Cloud": "https://status.cloud.google.com/",
+    "Google Workspace": "https://www.google.com/appsstatus/dashboard/"
+}
 
-# ==========================================
-# 📤 FUNCIÓN PARA ENVIAR MENSAJE A TELEGRAM
-# ==========================================
-async def send_telegram_message(mensaje):
+ARCHIVO_ESTADO = "estado_servicios.json"
+
+# === SESIÓN SEGURA ===
+session = requests.Session()
+retries = Retry(total=3, backoff_factor=2)
+adapter = HTTPAdapter(max_retries=retries)
+session.mount("https://", adapter)
+session.mount("http://", adapter)
+
+
+# === FUNCIONES ===
+def enviar_notificacion(mensaje):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    params = {"chat_id": CHAT_ID, "text": mensaje, "parse_mode": None}
     try:
-        await bot.send_message(chat_id=CHAT_ID, text=mensaje)
-        print(f"📨 Mensaje enviado: {mensaje}")
-    except Exception as e:
-        print(f"⚠️ Error al enviar mensaje: {e}")
-
-# ==========================================
-# 🔎 MONITOREO DE SERVICIOS
-# ==========================================
-def monitorear_servicios():
-    while True:
-        print("🛰️ Iniciando monitoreo de servicios...")
-        problemas = []
-
-        for nombre, url in URLS_MONITOREO.items():
-            try:
-                r = requests.get(url, timeout=10)
-                if r.status_code != 200:
-                    problemas.append(f"{nombre}: Código {r.status_code}")
-            except Exception as e:
-                problemas.append(f"{nombre}: Error {str(e)}")
-
-        if problemas:
-            mensaje = "⚠️ Problemas detectados:\n" + "\n".join(problemas)
-            mensaje += "\n\n🔗 Verifica detalles en las páginas oficiales."
+        r = session.get(url, params=params, timeout=10)
+        if r.status_code == 200:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Notificación enviada.")
         else:
-            mensaje = "✅ Todos los servicios están funcionando correctamente."
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Error al enviar notificación: {r.text}")
+    except Exception as e:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Error al conectar con Telegram: {e}")
 
-        asyncio.run(send_telegram_message(mensaje))
-        time.sleep(INTERVALO_HORAS * 3600)
 
-# ==========================================
-# ♻️ AUTO-PING PARA MANTENER ACTIVO EL BOT
-# ==========================================
-def keep_alive():
-    while True:
+def cargar_estado_anterior():
+    try:
+        with open(ARCHIVO_ESTADO, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+
+def guardar_estado_actual(estado):
+    with open(ARCHIVO_ESTADO, "w") as f:
+        json.dump(estado, f, indent=4)
+
+
+def verificar_servicios():
+    estado_anterior = cargar_estado_anterior()
+    estado_actual = {}
+
+    for nombre, url in SERVICIOS.items():
         try:
-            requests.get("https://monitor-bot-335u.onrender.com")
-            print("💓 Ping enviado a Render para mantener el bot activo.")
+            resp = session.get(url, timeout=10)
+            if resp.status_code == 200:
+                data = resp.text.lower()
+                if any(x in data for x in ["degraded", "incident", "down", "outage", "disruption"]):
+                    estado = "⚠️ Problemas detectados"
+                else:
+                    estado = "✅ Operativo"
+            else:
+                estado = "❌ Error al consultar"
         except Exception as e:
-            print(f"Error en ping: {e}")
-        time.sleep(600)  # cada 10 minutos
+            estado = f"❌ Error: {str(e)}"
 
-# ==========================================
-# 🌍 SERVIDOR WEB REQUERIDO POR RENDER
-# ==========================================
-@app.route("/")
-def home():
-    return "✅ Bot de monitoreo activo y en ejecución."
+        estado_actual[nombre] = estado
 
-# ==========================================
-# 🚀 EJECUCIÓN PRINCIPAL
-# ==========================================
+        if nombre not in estado_anterior or estado != estado_anterior[nombre]:
+            mensaje = (
+                f"🚨 Cambio detectado en {nombre}\n"
+                f"Anterior: {estado_anterior.get(nombre, 'Desconocido')}\n"
+                f"Actual: {estado}\n"
+                f"🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+            if "⚠️" in estado or "❌" in estado:
+                mensaje += f"\n🔗 Ver más: {PAGINAS_ESTADO[nombre]}"
+            enviar_notificacion(mensaje)
+
+    guardar_estado_actual(estado_actual)
+    return estado_actual
+
+
+def enviar_reporte_general(estado_actual):
+    reporte = "📊 *REPORTE GENERAL DE ESTADO DE SERVICIOS:*\n\n"
+    for servicio, estado in estado_actual.items():
+        if "⚠️" in estado or "❌" in estado:
+            reporte += f"• {servicio}: {estado}\n   🔗 {PAGINAS_ESTADO[servicio]}\n"
+        else:
+            reporte += f"• {servicio}: {estado}\n"
+    reporte += f"\n🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    enviar_notificacion(reporte)
+
+
+# === PROGRAMA PRINCIPAL ===
 if __name__ == "__main__":
-    threading.Thread(target=monitorear_servicios, daemon=True).start()
-    threading.Thread(target=keep_alive, daemon=True).start()
-    app.run(host="0.0.0.0", port=10000)
+    print("🚀 MONITOR DE SERVICIOS INICIADO")
+    enviar_notificacion("✅ Monitor de servicios iniciado correctamente.")
+
+    while True:
+        resultado = verificar_servicios()
+        enviar_reporte_general(resultado)
+        hora = datetime.now().strftime('%H:%M:%S')
+        print(f"\n[{hora}] ESTADO ACTUAL:")
+        for servicio, estado in resultado.items():
+            print(f"   - {servicio}: {estado}")
+        time.sleep(INTERVALO)
