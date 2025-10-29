@@ -1,7 +1,7 @@
 import os
 import time
 import requests
-import telegram
+from telegram import Bot
 from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
