@@ -21,7 +21,7 @@ load_dotenv()
 # === CONFIGURACIÓN ===
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-INTERVALO = 900  # 15 minutos
+INTERVALO = 1  # 15 minutos
 
 SERVICIOS = {
     "AWS": "https://status.aws.amazon.com/data.json",
