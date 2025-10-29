@@ -22,7 +22,7 @@ load_dotenv()
 # === CONFIGURACIÓN ===
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-INTERVALO = 1  # 15 minutos
+INTERVALO = 900 # 15 minutos
 ZONA_COLOMBIA = pytz.timezone("America/Bogota")
 
 SERVICIOS = {
