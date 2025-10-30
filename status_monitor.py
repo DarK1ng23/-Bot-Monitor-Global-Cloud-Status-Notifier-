@@ -8,7 +8,7 @@ from flask import Flask
 # --- Configuración ---
 TELEGRAM_TOKEN = "TU_TOKEN_AQUI"
 CHAT_ID = "TU_CHAT_ID_AQUI"
-INTERVALO = 1  # 15 minutos
+
 
 bot = Bot(token=TELEGRAM_TOKEN)
 
@@ -82,7 +82,7 @@ def monitorear():
                 bot.send_message(chat_id=CHAT_ID, text=alerta, parse_mode="Markdown")
         
         bot.send_message(chat_id=CHAT_ID, text=reporte_general)
-        time.sleep(900)  # Esperar 15 minutos
+        time.sleep(1)  # Esperar 15 minutos
 
 if __name__ == "__main__":
     import threading
