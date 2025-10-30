@@ -3,5 +3,5 @@ python-dotenv
 requests
 urllib3
 pytz
-python-telegram-bot==20.8
+
 
