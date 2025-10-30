@@ -8,6 +8,7 @@ from flask import Flask
 # --- Configuración ---
 TELEGRAM_TOKEN = "TU_TOKEN_AQUI"
 CHAT_ID = "TU_CHAT_ID_AQUI"
+INTERVALO = 1  # 15 minutos
 
 bot = Bot(token=TELEGRAM_TOKEN)
 
