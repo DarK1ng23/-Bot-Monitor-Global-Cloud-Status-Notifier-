@@ -1,13 +1,24 @@
 import requests
 import time
+import os
 from datetime import datetime
 from telegram import Bot
+from flask import Flask
 
 # --- Configuración ---
 TELEGRAM_TOKEN = "TU_TOKEN_AQUI"
 CHAT_ID = "TU_CHAT_ID_AQUI"
 
 bot = Bot(token=TELEGRAM_TOKEN)
+
+# Flask para mantener el servicio activo en Render
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "✅ Monitor de servicios activo."
+
+port = int(os.environ.get("PORT", 10000))
 
 # URLs de estado
 status_urls = {
@@ -25,7 +36,6 @@ def verificar_servicio(nombre, url):
     try:
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
-            # Consideramos que está operativo si responde bien
             return "✅ Operativo"
         else:
             return "⚠️ Problemas detectados"
@@ -57,27 +67,28 @@ def monitorear():
             estado_actual = verificar_servicio(nombre, url)
             estado_anterior = previous_status.get(nombre)
             
-            # Reporte general siempre
             reporte_general += f"• {nombre}: {estado_actual}\n"
             if estado_actual != "✅ Operativo":
                 reporte_general += f"   🔗 {url}\n"
             
-            # Si el estado cambió, generamos alerta
             if estado_anterior and estado_anterior != estado_actual:
                 cambios.append(generar_alerta(nombre, estado_actual, url))
             
             previous_status[nombre] = estado_actual
         
-        # Enviamos alerta solo si hubo cambios
         if cambios:
             for alerta in cambios:
                 bot.send_message(chat_id=CHAT_ID, text=alerta, parse_mode="Markdown")
         
-        # Siempre enviamos el reporte general simple cada 15 minutos
         bot.send_message(chat_id=CHAT_ID, text=reporte_general)
-        
-        time.sleep(900)  # Esperar 15 minutos (900 segundos)
+        time.sleep(900)  # Esperar 15 minutos
 
 if __name__ == "__main__":
-    monitorear()
+    import threading
 
+    hilo = threading.Thread(target=monitorear)
+    hilo.daemon = True
+    hilo.start()
+
+    # Mantener el servicio activo en Render
+    app.run(host="0.0.0.0", port=port)
