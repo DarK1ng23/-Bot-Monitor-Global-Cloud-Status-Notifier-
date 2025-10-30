@@ -22,7 +22,7 @@ load_dotenv()
 # === CONFIGURACIÓN ===
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-INTERVALO = 900 # 15 minutos
+INTERVALO = 900  # 15 minutos
 ZONA_COLOMBIA = pytz.timezone("America/Bogota")
 
 SERVICIOS = {
@@ -54,6 +54,7 @@ session.mount("http://", adapter)
 def hora_actual_col():
     """Devuelve la hora actual en hora colombiana (GMT-5)."""
     return datetime.now(ZONA_COLOMBIA).strftime('%Y-%m-%d %H:%M:%S')
+
 
 # === FUNCIONES PRINCIPALES ===
 def enviar_notificacion(mensaje):
@@ -97,11 +98,13 @@ def verificar_servicios():
                     estado = "✅ Operativo"
             else:
                 estado = "❌ Error al consultar"
-        except Exception as e:
-            estado = f"❌ Error: {str(e)}"
+        except Exception:
+            # 👇 Se reemplaza el error técnico por un mensaje limpio
+            estado = "❌ Error"
 
         estado_actual[nombre] = estado
 
+        # Detectar cambios individuales
         if nombre not in estado_anterior or estado != estado_anterior[nombre]:
             mensaje = (
                 f"🚨 Cambio detectado en {nombre}\n"
@@ -118,12 +121,12 @@ def verificar_servicios():
 
 
 def enviar_reporte_general(estado_actual):
-    reporte = "📊 *REPORTE GENERAL DE ESTADO DE SERVICIOS:*\n\n"
+    """Envía reporte general limpio cada 15 minutos."""
+    reporte = "📊 REPORTE GENERAL DE ESTADO DE SERVICIOS:\n\n"
     for servicio, estado in estado_actual.items():
+        reporte += f"• {servicio}: {estado}\n"
         if "⚠️" in estado or "❌" in estado:
-            reporte += f"• {servicio}: {estado}\n   🔗 {PAGINAS_ESTADO[servicio]}\n"
-        else:
-            reporte += f"• {servicio}: {estado}\n"
+            reporte += f"   🔗 {PAGINAS_ESTADO[servicio]}\n"
     reporte += f"\n🕒 {hora_actual_col()} (Hora Colombia)"
     enviar_notificacion(reporte)
 
