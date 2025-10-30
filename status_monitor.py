@@ -1,10 +1,10 @@
 import requests
-import time
+import asyncio
 from datetime import datetime
 from telegram import Bot
-import asyncio
-from flask import Flask
+from flask import Flask, send_from_directory
 import os
+import logging
 
 # --- Configuración ---
 TELEGRAM_TOKEN = "TU_TOKEN_AQUI"
@@ -12,6 +12,10 @@ CHAT_ID = "TU_CHAT_ID_AQUI"
 
 bot = Bot(token=TELEGRAM_TOKEN)
 app = Flask(__name__)
+
+# --- Silenciar logs de Flask ---
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)  # Solo errores graves
 
 # URLs de estado
 status_urls = {
@@ -22,30 +26,17 @@ status_urls = {
     "Google Workspace": "https://www.google.com/appsstatus/dashboard/",
 }
 
-# Estado previo
 previous_status = {}
 
+# --- Funciones de verificación ---
 def verificar_servicio(nombre, url):
     try:
         response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            return "✅ Operativo"
-        else:
-            return "⚠️ Problemas detectados"
+        return "✅ Operativo" if response.status_code == 200 else "⚠️ Problemas detectados"
     except requests.exceptions.SSLError:
         return "❌ Error SSL"
     except Exception:
         return "⚠️ Problemas detectados"
-
-def generar_reporte():
-    reporte = "📊 REPORTE GENERAL DE ESTADO DE SERVICIOS:\n\n"
-    for nombre, url in status_urls.items():
-        estado = verificar_servicio(nombre, url)
-        reporte += f"• {nombre}: {estado}\n"
-        if estado != "✅ Operativo":
-            reporte += f"   🔗 {url}\n"
-    reporte += f"\n🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (Hora Colombia)"
-    return reporte
 
 def generar_alerta(nombre, estado, url):
     return f"🚨 Cambio detectado en *{nombre}*\n\nNuevo estado: {estado}\n🔗 {url}"
@@ -70,23 +61,35 @@ async def monitorear():
 
             previous_status[nombre] = estado_actual
 
-        # Enviar alertas si hay cambios
         if cambios:
             for alerta in cambios:
                 await bot.send_message(chat_id=CHAT_ID, text=alerta, parse_mode="Markdown")
 
-        # Enviar reporte general cada 15 minutos
         await bot.send_message(chat_id=CHAT_ID, text=reporte_general)
-
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🕒 Próximo reporte en 15 minutos...")
-        await asyncio.sleep(900)  # 15 minutos = 900 segundos
+        await asyncio.sleep(900)
 
+# --- Rutas Flask ---
 @app.route("/")
 def home():
     return "✅ Bot Monitor Global Cloud Status corriendo correctamente."
 
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'),
+                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
+# --- Main ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    loop = asyncio.get_event_loop()
+    
+    # --- Manejar event loop moderno ---
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
     loop.create_task(monitorear())
     app.run(host="0.0.0.0", port=port)
+
