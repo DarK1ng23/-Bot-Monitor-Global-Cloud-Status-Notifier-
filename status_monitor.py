@@ -1,152 +1,82 @@
-import os
 import requests
-import json
 import time
 from datetime import datetime
-import pytz
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-from dotenv import load_dotenv
-from flask import Flask
+from telegram import Bot
 
-# === FLASK PARA RENDER ===
-app = Flask(__name__)
+# --- Configuración ---
+TELEGRAM_TOKEN = "TU_TOKEN_AQUI"
+CHAT_ID = "TU_CHAT_ID_AQUI"
 
-@app.route('/')
-def home():
-    return "✅ Monitor de servicios en ejecución"
+bot = Bot(token=TELEGRAM_TOKEN)
 
-# Cargar variables desde .env
-load_dotenv()
-
-# === CONFIGURACIÓN ===
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
-INTERVALO = 900  # 15 minutos
-ZONA_COLOMBIA = pytz.timezone("America/Bogota")
-
-SERVICIOS = {
-    "AWS": "https://status.aws.amazon.com/data.json",
-    "Azure": "https://status.azure.com/en-us/status",
-    "Microsoft 365": "https://status.office.com/api/reporting/ServiceComms/CurrentStatus",
-    "Google Cloud": "https://status.cloud.google.com/incidents.json",
-    "Google Workspace": "https://www.google.com/appsstatus/dashboard/incidents.json"
-}
-
-PAGINAS_ESTADO = {
+# URLs de estado
+status_urls = {
     "AWS": "https://status.aws.amazon.com/",
     "Azure": "https://status.azure.com/en-us/status",
     "Microsoft 365": "https://status.office.com/",
     "Google Cloud": "https://status.cloud.google.com/",
-    "Google Workspace": "https://www.google.com/appsstatus/dashboard/"
+    "Google Workspace": "https://www.google.com/appsstatus/dashboard/",
 }
 
-ARCHIVO_ESTADO = "estado_servicios.json"
+# Estado previo
+previous_status = {}
 
-# === SESIÓN SEGURA ===
-session = requests.Session()
-retries = Retry(total=3, backoff_factor=2)
-adapter = HTTPAdapter(max_retries=retries)
-session.mount("https://", adapter)
-session.mount("http://", adapter)
-
-# === FUNCIONES AUXILIARES ===
-def hora_actual_col():
-    """Devuelve la hora actual en hora colombiana (GMT-5)."""
-    return datetime.now(ZONA_COLOMBIA).strftime('%Y-%m-%d %H:%M:%S')
-
-
-# === FUNCIONES PRINCIPALES ===
-def enviar_notificacion(mensaje):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    params = {"chat_id": CHAT_ID, "text": mensaje, "parse_mode": None}
+def verificar_servicio(nombre, url):
     try:
-        r = session.get(url, params=params, timeout=10)
-        if r.status_code == 200:
-            print(f"[{hora_actual_col()}] ✅ Notificación enviada.")
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            # Consideramos que está operativo si responde bien
+            return "✅ Operativo"
         else:
-            print(f"[{hora_actual_col()}] ⚠️ Error al enviar notificación: {r.text}")
-    except Exception as e:
-        print(f"[{hora_actual_col()}] ❌ Error al conectar con Telegram: {e}")
+            return "⚠️ Problemas detectados"
+    except requests.exceptions.SSLError:
+        return "❌ Error SSL"
+    except Exception:
+        return "⚠️ Problemas detectados"
 
-
-def cargar_estado_anterior():
-    try:
-        with open(ARCHIVO_ESTADO, "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-
-
-def guardar_estado_actual(estado):
-    with open(ARCHIVO_ESTADO, "w") as f:
-        json.dump(estado, f, indent=4)
-
-
-def verificar_servicios():
-    estado_anterior = cargar_estado_anterior()
-    estado_actual = {}
-
-    for nombre, url in SERVICIOS.items():
-        try:
-            resp = session.get(url, timeout=10)
-            if resp.status_code == 200:
-                data = resp.text.lower()
-                if any(x in data for x in ["degraded", "incident", "down", "outage", "disruption"]):
-                    estado = "⚠️ Problemas detectados"
-                else:
-                    estado = "✅ Operativo"
-            else:
-                estado = "❌ Error al consultar"
-        except Exception:
-            # 👇 Se reemplaza el error técnico por un mensaje limpio
-            estado = "❌ Error"
-
-        estado_actual[nombre] = estado
-
-        # Detectar cambios individuales
-        if nombre not in estado_anterior or estado != estado_anterior[nombre]:
-            mensaje = (
-                f"🚨 Cambio detectado en {nombre}\n"
-                f"Anterior: {estado_anterior.get(nombre, 'Desconocido')}\n"
-                f"Actual: {estado}\n"
-                f"🕒 {hora_actual_col()} (Hora Colombia)"
-            )
-            if "⚠️" in estado or "❌" in estado:
-                mensaje += f"\n🔗 Ver más: {PAGINAS_ESTADO[nombre]}"
-            enviar_notificacion(mensaje)
-
-    guardar_estado_actual(estado_actual)
-    return estado_actual
-
-
-def enviar_reporte_general(estado_actual):
-    """Envía reporte general limpio cada 15 minutos."""
+def generar_reporte():
     reporte = "📊 REPORTE GENERAL DE ESTADO DE SERVICIOS:\n\n"
-    for servicio, estado in estado_actual.items():
-        reporte += f"• {servicio}: {estado}\n"
-        if "⚠️" in estado or "❌" in estado:
-            reporte += f"   🔗 {PAGINAS_ESTADO[servicio]}\n"
-    reporte += f"\n🕒 {hora_actual_col()} (Hora Colombia)"
-    enviar_notificacion(reporte)
+    for nombre, url in status_urls.items():
+        estado = verificar_servicio(nombre, url)
+        reporte += f"• {nombre}: {estado}\n"
+        if estado != "✅ Operativo":
+            reporte += f"   🔗 {url}\n"
+    reporte += f"\n🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (Hora Colombia)"
+    return reporte
 
+def generar_alerta(nombre, estado, url):
+    return f"🚨 Cambio detectado en *{nombre}*\n\nNuevo estado: {estado}\n🔗 {url}"
 
-# === PROGRAMA PRINCIPAL ===
+def monitorear():
+    global previous_status
+    while True:
+        cambios = []
+        reporte_general = "📊 REPORTE GENERAL DE ESTADO DE SERVICIOS:\n\n"
+        
+        for nombre, url in status_urls.items():
+            estado_actual = verificar_servicio(nombre, url)
+            estado_anterior = previous_status.get(nombre)
+            
+            # Reporte general siempre
+            reporte_general += f"• {nombre}: {estado_actual}\n"
+            if estado_actual != "✅ Operativo":
+                reporte_general += f"   🔗 {url}\n"
+            
+            # Si el estado cambió, generamos alerta
+            if estado_anterior and estado_anterior != estado_actual:
+                cambios.append(generar_alerta(nombre, estado_actual, url))
+            
+            previous_status[nombre] = estado_actual
+        
+        # Enviamos alerta solo si hubo cambios
+        if cambios:
+            for alerta in cambios:
+                bot.send_message(chat_id=CHAT_ID, text=alerta, parse_mode="Markdown")
+        
+        # Siempre enviamos el reporte general simple cada 15 minutos
+        bot.send_message(chat_id=CHAT_ID, text=reporte_general)
+        
+        time.sleep(900)  # Esperar 15 minutos (900 segundos)
+
 if __name__ == "__main__":
-    print("🚀 MONITOR DE SERVICIOS INICIADO")
-    enviar_notificacion("✅ Monitor de servicios iniciado correctamente (Hora Colombia).")
-
-    port = int(os.environ.get("PORT", 10000))
-    from threading import Thread
-
-    def ejecutar_monitor():
-        while True:
-            resultado = verificar_servicios()
-            enviar_reporte_general(resultado)
-            print(f"\n[{hora_actual_col()}] ESTADO ACTUAL:")
-            for servicio, estado in resultado.items():
-                print(f"   - {servicio}: {estado}")
-            time.sleep(INTERVALO)
-
-    Thread(target=ejecutar_monitor, daemon=True).start()
-    app.run(host="0.0.0.0", port=port)
+    monitorear()
